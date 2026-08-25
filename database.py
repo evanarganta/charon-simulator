@@ -58,23 +58,23 @@ def init_db():
         cursor.execute("PRAGMA table_info(players)")
         columns = [row["name"] for row in cursor.fetchall()]
 
-        new_columns = {
-            "encounters_completed": "INTEGER DEFAULT 0",
-            "artifacts": "TEXT DEFAULT '{}'",
-            "ashen_embers": "INTEGER DEFAULT 0",
-            "active_bounties": "TEXT DEFAULT '[]'",
-            "surge_meter": "REAL DEFAULT 0.0",
-            "surge_expires": "REAL DEFAULT 0.0",
-            "last_gamble": "REAL DEFAULT 0.0",
-            "last_fate_card": "REAL DEFAULT 0.0",
-            "active_voyage": "TEXT DEFAULT '{}'",
-            "pending_encounter": "TEXT DEFAULT ''",
-            "stats": "TEXT DEFAULT '{}'"
+        new_column_statements = {
+            "encounters_completed": "ALTER TABLE players ADD COLUMN encounters_completed INTEGER DEFAULT 0",
+            "artifacts": "ALTER TABLE players ADD COLUMN artifacts TEXT DEFAULT '{}'",
+            "ashen_embers": "ALTER TABLE players ADD COLUMN ashen_embers INTEGER DEFAULT 0",
+            "active_bounties": "ALTER TABLE players ADD COLUMN active_bounties TEXT DEFAULT '[]'",
+            "surge_meter": "ALTER TABLE players ADD COLUMN surge_meter REAL DEFAULT 0.0",
+            "surge_expires": "ALTER TABLE players ADD COLUMN surge_expires REAL DEFAULT 0.0",
+            "last_gamble": "ALTER TABLE players ADD COLUMN last_gamble REAL DEFAULT 0.0",
+            "last_fate_card": "ALTER TABLE players ADD COLUMN last_fate_card REAL DEFAULT 0.0",
+            "active_voyage": "ALTER TABLE players ADD COLUMN active_voyage TEXT DEFAULT '{}'",
+            "pending_encounter": "ALTER TABLE players ADD COLUMN pending_encounter TEXT DEFAULT ''",
+            "stats": "ALTER TABLE players ADD COLUMN stats TEXT DEFAULT '{}'"
         }
 
-        for col, col_type in new_columns.items():
+        for col, stmt in new_column_statements.items():
             if col not in columns:
-                cursor.execute(f"ALTER TABLE players ADD COLUMN {col} {col_type}")
+                cursor.execute(stmt)
 
         conn.commit()
 
