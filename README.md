@@ -4,25 +4,35 @@
 > *The shore is full.*  
 > *Ferry them all."*
 
-**Charon Simulator** is an interactive Discord idle/incremental game bot. Players take the helm of **Charon**, legendary ferryman of Hades. Your solemn duty is to ferry every mortal soul across the black waters of Acheron for 1 Obol each, buying mythological upgrades, overcoming river anomalies, venturing into deep river expeditions, and gambling with Thanatos until you have delivered all **117,182,993,899 human souls** who have ever lived.
+An idle/incremental game where players are Charon, the ferryman of Acheron. Set in a world after the fall of man, your duty is to ferry every mortal soul across the black waters of Acheron for 1 Obol each, buying mythological upgrades, overcoming river anomalies, venturing into deep river expeditions, and gambling with Thanatos until you have ferried all 117,182,993,899 human souls who have ever lived.
 
 ---
 
-## 🌟 Key Features
+## Features
 
 - **Master Underworld Helm (`/charon`)**: A single, unified interactive dashboard. Seamlessly switch between all Underworld realms via the built-in Realm Navigator dropdown!
-- **🌊 Shore of Acheron**: Manual rhythmic rowing with **Styx Surge (15x Frenzy)** and branching **River Encounters** (The Gilded King, Sirens, Whirlpools).
-- **🛒 Market of the Dead**: Forge black skiffs, cypress oars, and bind shade rowers to increase manual stroke power and passive income.
-- **🗺️ River Expeditions**: Embark on 3-stage tactical voyages across Acheron, Cocytus, and Phlegethon to defeat river guardians and earn **Ashen Embers**.
-- **🎲 Thanatos' Loom & Bones**: Wager obols in 2d6 Knuckle-Bones (with 3x Doubles Crits) and draw tarot Fate cards from the Moirai.
-- **📜 Royal Decrees of Hades**: Complete active contracts and earn Ashen Embers.
-- **🏛️ Sanctuary of Mythic Relics**: Bind permanent celestial artifacts (*The Golden Bough*, *Helm of Shadow*, *Coin of the Damned*).
-- **📊 Ferryman Record & Rankings**: Real-time progress bar toward 117 Billion souls and server Top 10 leaderboards.
+- **Shore of Acheron**: Manual rhythmic rowing with Styx Surge (15x Frenzy) and branching River Encounters (The Gilded King, Sirens, Whirlpools).
+- **Market of the Dead**: Upgrade your vessel, binding shade rowers, and purchasing equipment to increase manual stroke power and passive income.
+- **River Expeditions**: Embark on 3-stage tactical voyages across Acheron, Cocytus, and Phlegethon to earn Ashen Embers.
+- **Thanatos' Loom & Bones**: Wager obols in 2d6 Knuckle-Bones (with 3x Doubles Crits) and draw tarot Fate cards from the Moirai.
+- **Royal Decrees of Hades**: Complete active contracts and earn Ashen Embers.
+- **Sanctuary of Mythic Relics**: Bind permanent celestial artifacts (The Golden Bough, Helm of Shadow, Coin of the Damned).
+- **Ferryman Record & Rankings**: Real-time progress bar toward 117 Billion souls and server Top 10 leaderboards.
 - **Anti-Flood Engine**: Automatically deletes triggering text commands and updates responses in-place to keep your Discord channels clean.
 
 ---
 
-## 🛠️ Setup Instructions
+## Play
+
+I've yet to make an official bot for this with all the hosting so please bear with me and run it locally for now.
+
+| Command | Aliases | Description |
+| :--- | :--- | :--- |
+| `/charon` | `!charon`, `!ferry`, `!game`, `!play` | Open the unified interactive Underworld Helm |
+
+---
+
+## Setup
 
 ### 1. Prerequisites
 - **Python 3.10+** installed.
@@ -70,19 +80,11 @@ COMMAND_PREFIX=!
 
 ### 5. Run the Bot
 
-Launch Charon Simulator:
+Launch Charon Simulator!
 
 ```bash
-python bot.py
+py bot.py
 ```
-
----
-
-## 🎮 How to Play
-
-| Command | Aliases | Description |
-| :--- | :--- | :--- |
-| `/charon` | `!charon`, `!ferry`, `!game`, `!play` | Open the unified interactive Underworld Helm |
 
 ---
 
