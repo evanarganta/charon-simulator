@@ -160,6 +160,14 @@ def gear_effect_multiplier(player: dict, archetype: str) -> float:
     return 1.0
 
 
+def river_ember_reward(player: dict, base_reward: int) -> int:
+    """Apply the Marauder net's river-event Ember haul bonus."""
+    multiplier = 1.0
+    if equipped(player, "siren_bait_net"):
+        multiplier = 2.0 * gear_effect_multiplier(player, "marauder")
+    return max(1, round(base_reward * multiplier))
+
+
 def get_active_pacts(player: dict) -> list[str]:
     equipment = player.get("equipment", {})
     pacts = []
@@ -590,9 +598,12 @@ def resolve_encounter(user_id: int, encounter_id: str, choice_id: str, username:
             remaining_souls = max(0.0, TOTAL_HUMAN_SOULS - player["total_souls"])
             actual_souls = min(souls_reward, remaining_souls)
             player["total_souls"] += actual_souls
-            player["ashen_embers"] = player.get("ashen_embers", 0) + 10
-            msg = f"👑 You refused corruption! Delivered **+{actual_souls:,.0f} souls** and earned **+10 Ashen Embers** from Hades."
+            embers = river_ember_reward(player, 10)
+            player["ashen_embers"] = player.get("ashen_embers", 0) + embers
+            msg = f"👑 You refused corruption! Delivered **+{actual_souls:,.0f} souls** and earned **+{embers} Ashen Embers** from Hades."
         elif choice_id == "extort":
+            if not equipped(player, "stygian_harpoon"):
+                return False, "Extortion requires the Stygian Harpoon to be equipped.", player
             if random.random() < 0.5:
                 gold = max(1000.0, ops * 2500.0)
                 player["obols"] += gold
@@ -614,7 +625,7 @@ def resolve_encounter(user_id: int, encounter_id: str, choice_id: str, username:
             player["obols"] += safe_obols
             msg = f"🌊 You plugged your ears with wax and rowed steadily forward. Gained **+{safe_obols:,.0f} Obols**."
         elif choice_id == "cast_net":
-            embers = random.randint(15, 30)
+            embers = river_ember_reward(player, random.randint(15, 30))
             player["ashen_embers"] = player.get("ashen_embers", 0) + embers
             msg = f"🌊 You dredged the frozen riverbed and hauled up **+{embers} Ashen Embers**!"
 
@@ -631,8 +642,9 @@ def resolve_encounter(user_id: int, encounter_id: str, choice_id: str, username:
                 player["obols"] -= loss
                 msg = f"🌪️ The vortex battered your vessel. Lost {loss:,.0f} Obols in structural damage."
         elif choice_id == "sacrifice_cargo":
-            player["ashen_embers"] = player.get("ashen_embers", 0) + 25
-            msg = "🌪️ You cast out shrouds and drifted smoothly around the vortex, claiming a **Stygian Shard (+25 Ashen Embers)**!"
+            embers = river_ember_reward(player, 25)
+            player["ashen_embers"] = player.get("ashen_embers", 0) + embers
+            msg = f"🌪️ You cast out shrouds and drifted smoothly around the vortex, claiming a **Stygian Shard (+{embers} Ashen Embers)**!"
 
     elif encounter_id == "wandering_shades":
         if choice_id == "bless":

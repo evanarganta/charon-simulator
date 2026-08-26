@@ -205,6 +205,8 @@ def create_encounter_embed(player: dict, encounter_id: str) -> discord.Embed:
         color=config.COLOR_ENCOUNTER
     )
     for choice_id, cdata in enc["choices"].items():
+        if choice_id == "extort" and not database.equipped(player, "stygian_harpoon"):
+            continue
         embed.add_field(
             name=f"• {cdata['label']}",
             value=f"_{cdata['desc']}_",
@@ -887,6 +889,7 @@ class EncounterView(discord.ui.View):
         self.parent_view = parent_view
 
         enc = ENCOUNTERS[encounter_id]
+        player = database.get_player(user_id)
         styles = {
             "primary": discord.ButtonStyle.primary,
             "success": discord.ButtonStyle.success,
@@ -895,6 +898,8 @@ class EncounterView(discord.ui.View):
         }
 
         for choice_id, cdata in enc["choices"].items():
+            if choice_id == "extort" and not database.equipped(player, "stygian_harpoon"):
+                continue
             btn = discord.ui.Button(
                 label=cdata["label"],
                 style=styles.get(cdata.get("style"), discord.ButtonStyle.secondary),

@@ -96,7 +96,7 @@ class CharonBot(commands.Bot):
             return
         
         logger.error(f"Command error in {ctx.command}: {error}", exc_info=error)
-        await report(f"An error occurred: `{str(error)}`")
+        await report(f"An error occurred: `{error!s}`")
 
 
 
