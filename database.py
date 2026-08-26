@@ -429,7 +429,7 @@ def resolve_encounter(user_id: int, encounter_id: str, choice_id: str, username:
         if choice_id == "listen":
             if random.random() < 0.5:
                 player["surge_expires"] = time.time() + 60.0
-                msg = "🌊 **ECSTATIC FRENZY!** The Siren's song ignited a 60-second **Styx Surge (15x Multiplier)**!"
+                msg = "🌊 **ECSTATIC FRENZY!** The Siren's song ignited a 60-second **Acheron's Wake (15x Multiplier)**!"
             else:
                 loss = player["obols"] * 0.15
                 player["obols"] = max(0.0, player["obols"] - loss)
@@ -486,7 +486,7 @@ def resolve_encounter(user_id: int, encounter_id: str, choice_id: str, username:
             if player["obols"] >= cost:
                 player["obols"] -= cost
                 player["surge_meter"] = min(SURGE_THRESHOLD, player.get("surge_meter", 0.0) + 50.0)
-                msg = "⚖️ Surrendered 1,000 Obols. Gained **+50% Styx Surge Charge**!"
+                msg = "⚖️ Surrendered 1,000 Obols. Gained **+50% Acheron's Wake Charge**!"
             else:
                 msg = "⚖️ You lack the 1,000 Obols for tribute."
 
@@ -622,7 +622,7 @@ def draw_fate_card(user_id: int, username: str = "Ferryman") -> Tuple[bool, str,
         msg += f"Effect: Vaulted **+{gain:,.0f} Obols**!"
     elif card["type"] == "instant_surge":
         player["surge_expires"] = time.time() + SURGE_DURATION_SECONDS
-        msg += "Effect: Ignited an instant **Styx Surge Frenzy (15x Multiplier)**!"
+        msg += "Effect: Ignited an instant **Acheron's Wake (15x Multiplier)**!"
     elif card["type"] == "embers_gamble":
         embers = card["value"]
         player["ashen_embers"] = player.get("ashen_embers", 0) + embers
@@ -770,6 +770,16 @@ def ascend(user_id: int, username: str = "Ferryman") -> Tuple[bool, str, dict]:
     save_player(player)
 
     return True, f"🏆 CONGRATULATIONS! You have ferried all human souls and ascended to Prestige Level {player['prestige']} (+{(player['prestige']) * 100}% permanent boost)!\nThe shoreline of Acheron replenishes with shades awaiting passage in the new cycle.", player
+
+
+def reset_player_data(user_id: int, username: str = "Ferryman") -> dict:
+    """Completely wipes and resets all player progress (Obols, Souls, Prestige, Embers, Relics, Stats)."""
+    init_db()
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM players WHERE user_id = ?", (user_id,))
+        conn.commit()
+    return get_player(user_id, username)
 
 
 def get_leaderboard(limit: int = 10) -> List[dict]:

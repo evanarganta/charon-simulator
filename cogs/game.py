@@ -9,7 +9,7 @@ from discord import app_commands
 import database
 import config
 from config import TOTAL_HUMAN_SOULS, format_number
-from cogs.ui import CharonDashboardView
+from cogs.ui import CharonDashboardView, ResetConfirmationView
 
 
 class GameCog(commands.Cog, name="Game"):
@@ -46,7 +46,6 @@ class GameCog(commands.Cog, name="Game"):
 
     @commands.hybrid_command(
         name="charon",
-        aliases=["ferry", "play", "game", "menu", "help"],
         description="Take the helm of Charon's skiff and navigate all Underworld realms."
     )
     @app_commands.describe(realm="Initial Underworld realm to open (optional)")
@@ -57,7 +56,7 @@ class GameCog(commands.Cog, name="Game"):
         app_commands.Choice(name="🎲 Thanatos' Loom & Bones (Dice & Fate)", value="gamble"),
         app_commands.Choice(name="📜 Decrees of Hades (Bounties)", value="bounties"),
         app_commands.Choice(name="🏛️ Sanctuary of Mythic Relics", value="artifacts"),
-        app_commands.Choice(name="📊 Ferryman Profile & Leaderboard", value="profile")
+        app_commands.Choice(name="📊 Ferryman Record & Rankings", value="profile")
     ])
     async def charon_cmd(self, ctx: commands.Context, realm: str = "river"):
         """Master command opening the unified interactive dashboard."""

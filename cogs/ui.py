@@ -26,10 +26,10 @@ def create_ferry_embed(player: dict, offline_earned: float = 0.0, click_earned: 
     opc, ops = database.calculate_rates(upgrades, prestige, artifacts, surge_active)
 
     color = config.COLOR_SURGE if surge_active else config.COLOR_DEFAULT
-    surge_tag = " 🔥 [STYX SURGE FRENZY | 15x BOOST!]" if surge_active else ""
+    surge_tag = " 🔥 [ACHERON'S WAKE | 15x BOOST!]" if surge_active else ""
 
     embed = discord.Embed(
-        title=f"Acheron is the Shore after Mankind {surge_tag}",
+        title=f"Your Ferry Upon the Shores of Acheron {surge_tag}",
         description=f"The fog hangs heavy over black waters. Countless shades linger at the shoreline of **{user_name}**, "
                     f"their eyes vacant, waiting for passage into quiet darkness.",
         color=color
@@ -47,13 +47,13 @@ def create_ferry_embed(player: dict, offline_earned: float = 0.0, click_earned: 
     # Surge Meter Bar
     if surge_active:
         rem_sec = max(0, int(player.get("surge_expires", 0) - time.time()))
-        surge_bar = f"🔥 **STYX SURGE ACTIVE!** `{rem_sec}s remaining`"
+        surge_bar = f"🔥 **ACHERON'S WAKE ACTIVE!** `{rem_sec}s remaining`"
     else:
         meter = player.get("surge_meter", 0.0)
         pct = min(1.0, max(0.0, meter / SURGE_THRESHOLD))
         filled = int(round(pct * 10))
         surge_bar = f"`[{'■'*filled}{'□'*(10-filled)}]` `{meter:.0f}%` (Row to ignite 15x Frenzy)"
-    embed.add_field(name="⚡ Styx Current (Fever Meter)", value=surge_bar, inline=True)
+    embed.add_field(name="⚡ Acheron's Wake (Fever Meter)", value=surge_bar, inline=True)
 
     # Total Souls Progress Bar
     progress_bar = get_progress_bar(souls)
@@ -384,7 +384,7 @@ class RealmSelect(discord.ui.Select):
     def __init__(self, dashboard: "CharonDashboardView", current_realm: str = "river"):
         self.dashboard = dashboard
         options = [
-            discord.SelectOption(label="Shore of Acheron", value="river", emoji="🌊", description="Row manually, build Styx Surge, face river perils.", default=(current_realm=="river")),
+            discord.SelectOption(label="Shore of Acheron", value="river", emoji="🌊", description="Row manually, build Acheron's Wake, face river perils.", default=(current_realm=="river")),
             discord.SelectOption(label="Market of the Dead", value="shop", emoji="🛒", description="Acquire skiffs, sails, and bind shade rowers.", default=(current_realm=="shop")),
             discord.SelectOption(label="Underworld Expeditions", value="voyages", emoji="🗺️", description="Depart on multi-stage river voyages & boss trials.", default=(current_realm=="voyages")),
             discord.SelectOption(label="Thanatos' Loom & Bones", value="gamble", emoji="🎲", description="Roll knuckle-bones & draw cards from the Moirai.", default=(current_realm=="gamble")),
@@ -525,7 +525,7 @@ class CharonDashboardView(discord.ui.View):
             return await interaction.response.send_message("Use `/charon` to open your own helm.", ephemeral=True)
         player, click_earned, offline_earned, surge_trig, new_enc = database.ferry_souls(self.user_id, interaction.user.display_name)
         if surge_trig:
-            self.status_footer = "⚡ STYX SURGE IGNITED! 15x Frenzy Multiplier active for 45s!"
+            self.status_footer = "⚡ ACHERON HAS AWAKEN! 15x Frenzy Multiplier active for 45s!"
         elif new_enc:
             self.status_footer = f"⚠️ An anomaly ({ENCOUNTERS[new_enc]['title']}) has appeared on the river!"
         elif player["total_souls"] >= TOTAL_HUMAN_SOULS:
@@ -736,6 +736,10 @@ class CharonDashboardView(discord.ui.View):
         asc_btn.callback = self._ascend_callback
         self.add_item(asc_btn)
 
+        reset_btn = discord.ui.Button(label="Reset All Data", style=discord.ButtonStyle.danger, row=1)
+        reset_btn.callback = self._reset_prompt_callback
+        self.add_item(reset_btn)
+
     async def _claim_daily_callback(self, interaction: discord.Interaction):
         if interaction.user.id != self.user_id:
             return await interaction.response.send_message("Use `/charon` to open your own helm.", ephemeral=True)
@@ -753,6 +757,54 @@ class CharonDashboardView(discord.ui.View):
         self.build_ui()
         embed = self.get_embed()
         await interaction.response.edit_message(embed=embed, view=self)
+
+    async def _reset_prompt_callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.user_id:
+            return await interaction.response.send_message("Use `/charon` to open your own helm.", ephemeral=True)
+
+        view = ResetConfirmationView(self.user_id, parent_view=self)
+        embed = discord.Embed(
+            title="💀 A Complete and Utter Destruction of the Ferryman",
+            description="Are you certain you wish to dissolve all your progress into the eternal void?\n\n"
+                        "• All **Obols** & **Souls Delivered** will be wiped to `0`.\n"
+                        "• All **Prestige Levels** & **Permanent Boosts** will be reset to `0`.\n"
+                        "• All **Ashen Embers** & **Mythic Artifacts** will be revoked.\n"
+                        "• All **Vessels, Oars, & Shade Rowers** will be dissolved.\n\n"
+                        "**This action is permanent and cannot be undone.**",
+            color=discord.Color.red()
+        )
+        await interaction.response.edit_message(embed=embed, view=view)
+
+
+class ResetConfirmationView(discord.ui.View):
+    """Confirmation prompt before obliterating player data."""
+
+    def __init__(self, user_id: int, parent_view: CharonDashboardView):
+        super().__init__(timeout=60)
+        self.user_id = user_id
+        self.parent_view = parent_view
+
+    @discord.ui.button(label="Confirm Wipe & Reset Data", style=discord.ButtonStyle.danger, row=0)
+    async def confirm_reset(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.user_id:
+            return await interaction.response.send_message("This record belongs to another Ferryman.", ephemeral=True)
+
+        database.reset_player_data(self.user_id, interaction.user.display_name)
+        self.parent_view.current_realm = "river"
+        self.parent_view.status_footer = "All records dissolved into the void. You stand once more at the beginning of Acheron."
+        self.parent_view.build_ui()
+        embed = self.parent_view.get_embed()
+        await interaction.response.edit_message(embed=embed, view=self.parent_view)
+
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary, row=0)
+    async def cancel_reset(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.user_id:
+            return await interaction.response.send_message("This record belongs to another Ferryman.", ephemeral=True)
+
+        self.parent_view.status_footer = "Obliteration cancelled. Your record remains intact."
+        self.parent_view.build_ui()
+        embed = self.parent_view.get_embed()
+        await interaction.response.edit_message(embed=embed, view=self.parent_view)
 
 
 class EncounterView(discord.ui.View):

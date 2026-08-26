@@ -63,8 +63,8 @@ class CharonBot(commands.Bot):
 
         # Set playing status
         activity = discord.Activity(
-            type=discord.ActivityType.watching,
-            name="Mankind is dead. (/charon)"
+            type=discord.ActivityType.playing,
+            name="https://github.com/evanarganta/acheron-simulator"
         )
         await self.change_presence(activity=activity)
 

@@ -300,7 +300,7 @@ MYTHIC_ARTIFACTS = {
         "id": "helm_shadows",
         "name": "Helm of Shadow",
         "icon": "👑",
-        "description": "Forged by the Cyclopes for Hades. +50% Passive Soul Flow (OPS) & +15s Styx Surge duration.",
+        "description": "Forged by the Cyclopes for Hades. +50% Passive Soul Flow (OPS) & +15s Acheron's Wake duration.",
         "opc_bonus": 0.0,
         "ops_bonus": 0.50,
         "cost_embers": 250
@@ -318,7 +318,7 @@ MYTHIC_ARTIFACTS = {
         "id": "iron_oarlock",
         "name": "Stygian Iron Oarlock",
         "icon": "⚓",
-        "description": "Reinforced with the black metal of Tartarus. Doubles Styx Surge meter charge rate.",
+        "description": "Reinforced with the black metal of Tartarus. Doubles Acheron's Wake meter charge rate.",
         "opc_bonus": 0.30,
         "ops_bonus": 0.10,
         "cost_embers": 180
@@ -497,7 +497,7 @@ BOUNTY_TEMPLATES = [
     {
         "id": "bounty_surge",
         "title": "Rage of the River",
-        "desc": "Trigger the Styx Surge Frenzy {target} times.",
+        "desc": "Trigger Acheron's Wake {target} times.",
         "target": 2,
         "reward_embers": 35,
         "type": "surges_triggered"
