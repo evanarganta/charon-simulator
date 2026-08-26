@@ -87,7 +87,7 @@ class CharonBot(commands.Bot):
                     await ctx.interaction.followup.send(message, ephemeral=True)
                 else:
                     await ctx.send(message, delete_after=10)
-            except (discord.NotFound, discord.HTTPException):
+            except (discord.Forbidden, discord.NotFound, discord.HTTPException):
                 # The original failure may already be an expired interaction.
                 logger.warning("Could not report command error: interaction expired or was already handled.")
 

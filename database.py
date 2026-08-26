@@ -7,6 +7,9 @@ import json
 import time
 import os
 import random
+import threading
+from collections import defaultdict
+from functools import wraps
 from typing import Dict, Any, Tuple, List, Optional
 import config
 from config import (
@@ -17,6 +20,16 @@ from config import (
 
 DB_DIR = os.path.join(os.path.dirname(__file__), "data")
 DB_PATH = os.path.join(DB_DIR, "charon.db")
+_PLAYER_MUTATION_LOCKS = defaultdict(threading.RLock)
+
+
+def serialized_player_mutation(func):
+    """Prevent concurrent interactions from overwriting one player's state."""
+    @wraps(func)
+    def wrapper(user_id: int, *args, **kwargs):
+        with _PLAYER_MUTATION_LOCKS[user_id]:
+            return func(user_id, *args, **kwargs)
+    return wrapper
 
 
 def get_connection():
@@ -459,7 +472,9 @@ def ferry_souls(user_id: int, username: str = "Ferryman") -> Tuple[dict, float, 
         if player.get("artifacts", {}).get("golden_bough"):
             chance += 0.10
         if equipped(player, "siren_bait_net"):
-            chance *= 4 * gear_effect_multiplier(player, "marauder")
+            # Net builds target a maximum 12% encounter rate. Cap after all
+            # modifiers so Golden Bough cannot turn it into a 52% interruption.
+            chance = min(chance * 4 * gear_effect_multiplier(player, "marauder"), 0.12)
         if random.random() < chance:
             anomaly_levels = {"gilded_king": 1, "wandering_shades": 2, "siren_cocytus": 3, "thanatos_envoy": 4, "charybdis_vortex": 6}
             eligible = [enc_id for enc_id in ENCOUNTERS if vessel_level(player) >= anomaly_levels.get(enc_id, 1)]
@@ -471,6 +486,7 @@ def ferry_souls(user_id: int, username: str = "Ferryman") -> Tuple[dict, float, 
     return player, opc, offline_earned, surge_triggered, new_encounter_id
 
 
+@serialized_player_mutation
 def buy_gear(user_id: int, gear_id: str, username: str = "Ferryman") -> Tuple[bool, str, dict]:
     """Binds a unique gear piece and equips it in its dedicated vessel slot."""
     if gear_id not in config.GEAR:
@@ -490,6 +506,7 @@ def buy_gear(user_id: int, gear_id: str, username: str = "Ferryman") -> Tuple[bo
     return True, f"Bound and equipped {gear['name']} in the {gear['slot']} slot.", player
 
 
+@serialized_player_mutation
 def equip_gear(user_id: int, gear_id: str, username: str = "Ferryman") -> Tuple[bool, str, dict]:
     player = get_player(user_id, username)
     if gear_id not in player.get("owned_gear", []) or gear_id not in config.GEAR:
@@ -500,6 +517,7 @@ def equip_gear(user_id: int, gear_id: str, username: str = "Ferryman") -> Tuple[
     return True, f"Equipped {gear['name']}.", player
 
 
+@serialized_player_mutation
 def transmute_gear(user_id: int, gear_id: str, username: str = "Ferryman") -> Tuple[bool, str, dict]:
     """Spend Embers to reroll a Soulfire stroke modifier on a bound component."""
     player = get_player(user_id, username)
@@ -515,6 +533,7 @@ def transmute_gear(user_id: int, gear_id: str, username: str = "Ferryman") -> Tu
     return True, f"Soulfire reshaped {config.GEAR[gear_id]['name']}: **+{bonus:.0%} stroke yield** while equipped.", player
 
 
+@serialized_player_mutation
 def upgrade_gear(user_id: int, gear_id: str, username: str = "Ferryman") -> Tuple[bool, str, dict]:
     """Level a bound component to a maximum of 10; Ember costs rise quadratically."""
     player = get_player(user_id, username)
@@ -533,6 +552,7 @@ def upgrade_gear(user_id: int, gear_id: str, username: str = "Ferryman") -> Tupl
     return True, f"Upgraded {config.GEAR[gear_id]['name']} to **Level {level + 1}/10** (+10% stroke yield while equipped).", player
 
 
+@serialized_player_mutation
 def upgrade_vessel(user_id: int, username: str = "Ferryman") -> Tuple[bool, str, dict]:
     """Refit the whole vessel, unlocking higher-rank gear and river content."""
     player = get_player(user_id, username)
