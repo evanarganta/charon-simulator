@@ -22,6 +22,59 @@ SURGE_THRESHOLD = 100.0          # Max meter to trigger
 SURGE_DURATION_SECONDS = 45.0    # Duration of the surge frenzy
 SURGE_MULTIPLIER = 15.0          # Multiplier during active surge
 
+# Build-crafting market. Gear is unique: buying a piece binds it and equips it
+# into its vessel slot, replacing the previously equipped piece in that slot.
+GEAR_SLOTS = ("hull", "oars", "lantern", "figurehead", "crew")
+VESSEL_LEVELS = {
+    1: "Splintered Skiff", 2: "Pitch-Coated Ferry", 3: "Shade Galley",
+    4: "Barge of Wailing", 5: "Iron Mortuary Vessel", 6: "Abyssal Skimmer",
+    7: "Dreadnought of Lethe", 8: "Obsidian Aircraft Carrier", 9: "Hades' Grand Liner",
+    10: "The One Ship to Ferry Them All",
+}
+
+def vessel_upgrade_cost(level: int) -> tuple[int, int]:
+    """Cost to advance from level to level + 1; level 10 is the cap."""
+    return 5_000 * (6 ** (level - 1)), 10 * (level ** 2)
+RIVER_CURRENTS = (
+    {"id": "phlegethon", "name": "Phlegethon Fire Rapids", "icon": "🔥", "favored": "marauder", "penalty": "necromancer", "description": "Marauder gear cuts through the boiling current; fleet engines labour in its heat."},
+    {"id": "cocytus", "name": "Cocytus Frost Fog", "icon": "❄️", "favored": "fate", "penalty": "speed", "description": "Fate-weaving pierces the white silence; rhythm is harder to hold."},
+    {"id": "lethe", "name": "Lethe Memory Mists", "icon": "🌫️", "favored": "necromancer", "penalty": "marauder", "description": "Bound crews remember their oaths; anomaly hunters lose the trail."},
+)
+
+GEAR = {
+    # Progression bands: early (hundreds), established (thousands), deep river
+    # (millions), and endgame (hundreds of millions to billions).
+    "fury_oarlock": {"name": "Fury-Carved Oarlock", "icon": "🌊", "slot": "oars", "archetype": "speed", "cost": 250, "vessel_req": 1, "description": "Rapid strokes build Rhythm Combo, up to 10x manual yield."},
+    "bone_diviner_oar": {"name": "Bone-Diviner Oar", "icon": "🎲", "slot": "oars", "archetype": "fate", "cost": 10_000, "description": "12% chance per stroke for a 3x Critical Dice Roll."},
+    "siren_bait_net": {"name": "Siren-Bait Net", "icon": "🕸️", "slot": "lantern", "archetype": "marauder", "cost": 250, "description": "Quadruples anomaly chance and doubles ember hauls from river events."},
+    "chthonic_overseer": {"name": "Chthonic Overseer", "icon": "💀", "slot": "crew", "archetype": "necromancer", "cost": 250, "description": "A manual stroke inspires shade rowers: +500% passive flow for 10 seconds."},
+    "bellowing_drums": {"name": "Bellowing Drums", "icon": "🥁", "slot": "crew", "archetype": "speed", "cost": 25_000_000, "description": "Each stroke during Acheron's Wake extends it by 1 second."},
+    "moirai_spindle": {"name": "Moirai Spindle", "icon": "🧵", "slot": "lantern", "archetype": "fate", "cost": 10_000, "description": "Knuckle-bone rewards are 4x; Fate Cards recharge twice as fast."},
+    "stygian_harpoon": {"name": "Stygian Harpoon", "icon": "🔱", "slot": "figurehead", "archetype": "marauder", "cost": 250, "description": "Unlocks high-risk extortion against river bosses."},
+    "soul_siphon_hull": {"name": "Soul Siphon Hull", "icon": "🛶", "slot": "hull", "archetype": "necromancer", "cost": 250, "description": "Converts 15% of passive souls into instant bonus Obols."},
+    "king_hull": {"name": "Hull of the Underworld King", "icon": "👑", "slot": "hull", "archetype": "pact", "cost": 3_000_000_000, "description": "The late-game anchor piece of the Pact of the Underworld King."},
+    "king_figurehead": {"name": "Crowned Prow Figurehead", "icon": "⚜️", "slot": "figurehead", "archetype": "pact", "cost": 3_000_000_000, "description": "A multi-billion capstone that completes the Underworld King's Pact."},
+    "obsidian_hull": {"name": "Obsidian Keel", "icon": "🪨", "slot": "hull", "archetype": "speed", "cost": 10_000, "description": "A balanced second-tier hull for relentless cadence builds."},
+    "leviathan_hull": {"name": "Leviathan Rib Hull", "icon": "🐋", "slot": "hull", "archetype": "marauder", "cost": 500_000, "description": "A deep-river chassis for anomaly hunters."},
+    "lethe_hull": {"name": "Lethe Memory Hull", "icon": "🌫️", "slot": "hull", "archetype": "fate", "cost": 25_000_000, "description": "A late hull that favors careful Fate-weaving."},
+    "titan_oar": {"name": "Titan's Shoulder Oar", "icon": "⚓", "slot": "oars", "archetype": "marauder", "cost": 500_000, "description": "A heavy third-tier oar for perilous river choices."},
+    "lethe_oar": {"name": "Oar of Forgotten Names", "icon": "🪶", "slot": "oars", "archetype": "necromancer", "cost": 25_000_000, "description": "A late oar that channels the tireless dead."},
+    "king_oar": {"name": "Scepter-Oar of Hades", "icon": "👑", "slot": "oars", "archetype": "pact", "cost": 3_000_000_000, "description": "An endgame oar fit for an eternal ferryman."},
+    "ember_beacon": {"name": "Ember Beacon", "icon": "🔥", "slot": "lantern", "archetype": "speed", "cost": 500_000, "description": "A third-tier beacon that rewards furious rowing."},
+    "oracle_lantern": {"name": "Oracle's Star Lantern", "icon": "🔮", "slot": "lantern", "archetype": "necromancer", "cost": 25_000_000, "description": "A late beacon for commanding spectral fleets."},
+    "king_lantern": {"name": "Eclipse Lantern", "icon": "🌑", "slot": "lantern", "archetype": "pact", "cost": 3_000_000_000, "description": "An endgame beacon that eclipses mortal sight."},
+    "siren_figurehead": {"name": "Siren Prow", "icon": "🧜", "slot": "figurehead", "archetype": "fate", "cost": 10_000, "description": "A second-tier prow that tempts chance and fate."},
+    "cerberus_figurehead": {"name": "Cerberus Figurehead", "icon": "🐕", "slot": "figurehead", "archetype": "necromancer", "cost": 500_000, "description": "A third-tier prow that steadies your bound crew."},
+    "phlegethon_figurehead": {"name": "Phlegethon Ram", "icon": "🌋", "slot": "figurehead", "archetype": "speed", "cost": 25_000_000, "description": "A late prow that refuses to yield to fire rapids."},
+    "soul_crown": {"name": "Crown of a Thousand Shades", "icon": "👻", "slot": "crew", "archetype": "fate", "cost": 10_000, "description": "A second-tier crew complement guided by the Moirai."},
+    "argonaut_crew": {"name": "Bound Argonauts", "icon": "🛡️", "slot": "crew", "archetype": "marauder", "cost": 500_000, "description": "A third-tier crew trained for hostile waters."},
+    "king_crew": {"name": "Royal Dead Legion", "icon": "⚔️", "slot": "crew", "archetype": "pact", "cost": 3_000_000_000, "description": "An endgame crew complement of Hades' own legion."},
+}
+
+# Every component follows the same five-rank vessel gate unless explicitly set.
+for _gear in GEAR.values():
+    _gear.setdefault("vessel_req", {250: 1, 10_000: 3, 500_000: 5, 25_000_000: 7, 3_000_000_000: 10}[_gear["cost"]])
+
 # Offline gain cap in seconds (max 24 hours = 86,400 seconds)
 MAX_OFFLINE_SECONDS = 86400
 
@@ -445,6 +498,8 @@ VOYAGES = {
         "reward_obols_mult": 2500
     }
 }
+
+VOYAGE_VESSEL_REQUIREMENTS = {"acheron": 1, "cocytus": 3, "phlegethon": 6}
 
 
 # ==========================================

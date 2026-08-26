@@ -26,7 +26,7 @@ def create_ferry_embed(player: dict, offline_earned: float = 0.0, click_earned: 
     opc, ops = database.calculate_rates(upgrades, prestige, artifacts, surge_active)
 
     color = config.COLOR_SURGE if surge_active else config.COLOR_DEFAULT
-    surge_tag = " 🔥 [ACHERON'S WAKE | 15x BOOST!]" if surge_active else ""
+    surge_tag = " 🔥" if surge_active else ""
 
     embed = discord.Embed(
         title=f"Your Ferry Upon the Shores of Acheron {surge_tag}",
@@ -54,6 +54,15 @@ def create_ferry_embed(player: dict, offline_earned: float = 0.0, click_earned: 
         filled = int(round(pct * 10))
         surge_bar = f"`[{'■'*filled}{'□'*(10-filled)}]` `{meter:.0f}%` (Row to ignite 15x Frenzy)"
     embed.add_field(name="⚡ Acheron's Wake (Fever Meter)", value=surge_bar, inline=True)
+
+    gear_notes = []
+    combo = player.get("stats", {}).get("rhythm_combo", 0)
+    if combo:
+        gear_notes.append(f"🌊 Rhythm Combo: **{combo}x**")
+    if time.time() < player.get("stats", {}).get("overseer_expires", 0):
+        gear_notes.append("💀 Shade Rowers Inspired: **+500% OPS**")
+    if gear_notes:
+        embed.add_field(name="Active Build Effects", value=" · ".join(gear_notes), inline=False)
 
     # Total Souls Progress Bar
     progress_bar = get_progress_bar(souls)
@@ -196,6 +205,8 @@ def create_encounter_embed(player: dict, encounter_id: str) -> discord.Embed:
         color=config.COLOR_ENCOUNTER
     )
     for choice_id, cdata in enc["choices"].items():
+        if choice_id == "extort" and not database.equipped(player, "stygian_harpoon"):
+            continue
         embed.add_field(
             name=f"• {cdata['label']}",
             value=f"_{cdata['desc']}_",
@@ -205,50 +216,47 @@ def create_encounter_embed(player: dict, encounter_id: str) -> discord.Embed:
 
 
 def create_shop_embed(player: dict, selected_item_id: str = None) -> discord.Embed:
-    """Generates Underworld Market embed."""
+    """Generates the build-crafting vessel forge."""
     obols = player["obols"]
-    upgrades = player["upgrades"]
+    equipment = player.get("equipment", {})
+    owned = player.get("owned_gear", [])
+    current = database.current_river()
+    vessel_rank = database.vessel_level(player)
+    vessel_name = config.VESSEL_LEVELS[vessel_rank]
 
     embed = discord.Embed(
-        title="⸸ Underworld Toll Market & Reliquary",
+        title="⸸ Vessel Forge & Synergy Market",
         description=f"🪙 Vaulted Obols: `{format_number(obols)}`\n"
-                    f"Surrender copper obols to forge black vessels and bind unquiet spirits.",
+                    f"{current['icon']} **Current: {current['name']}**\n_{current['description']}_",
         color=config.COLOR_DEFAULT
     )
 
-    if selected_item_id and selected_item_id in UPGRADES:
-        item = UPGRADES[selected_item_id]
-        owned = upgrades.get(selected_item_id, 0)
-        cost_x1 = config.get_upgrade_cost(selected_item_id, owned)
-        cost_x5 = sum(config.get_upgrade_cost(selected_item_id, owned + i) for i in range(5))
-        cost_x10 = sum(config.get_upgrade_cost(selected_item_id, owned + i) for i in range(10))
+    loadout = []
+    for slot in config.GEAR_SLOTS:
+        gear_id = equipment.get(slot)
+        loadout.append(f"**{slot.title()}**: {config.GEAR[gear_id]['name'] if gear_id in config.GEAR else 'Empty'}")
+    pacts = database.get_active_pacts(player)
+    embed.add_field(name="🛶 Equipped Vessel", value="\n".join(loadout) + (f"\n\n✨ **{', '.join(pacts)}** — 5x Frenzy duration" if pacts else "\n\n_Equip matching relics to awaken Ancient Pacts._"), inline=False)
+    next_refit = "**MAX RANK — colossal Underworld cruise ship**" if vessel_rank >= 10 else f"Next refit: `{format_number(config.vessel_upgrade_cost(vessel_rank)[0])}` Obols + `{config.vessel_upgrade_cost(vessel_rank)[1]}` Embers"
+    embed.add_field(name=f"⛴️ Vessel Rank {vessel_rank}/10 · {vessel_name}", value=f"{next_refit}\nHigher ranks unlock the matching gear bands, voyages, and rarer anomalies.", inline=False)
+
+    if selected_item_id and selected_item_id in config.GEAR:
+        item = config.GEAR[selected_item_id]
+        is_owned = selected_item_id in owned
+        status = "**BOUND** — choose Equip" if is_owned else f"**Forge Cost:** `{format_number(item['cost'])}` Obols"
+        modifier = player.get("stats", {}).get("gear_mods", {}).get(selected_item_id)
+        level = player.get("stats", {}).get("gear_levels", {}).get(selected_item_id, 0)
+        next_upgrade = 10 * (level + 1) ** 2 if level < 10 else None
 
         embed.add_field(
-            name=f"{item['icon']} {item['name']} (Possessed: {owned})",
-            value=f"_{item['description']}_\n\n"
-                  f"**Cost x1:** `{format_number(cost_x1)}` Obols\n"
-                  f"**Cost x5:** `{format_number(cost_x5)}` Obols\n"
-                  f"**Cost x10:** `{format_number(cost_x10)}` Obols",
+            name=f"{item['icon']} {item['name']} · {item['archetype'].title()} {status}",
+            value=f"_Slot: {item['slot'].title()} · Vessel Rank {item['vessel_req']}_\n{item['description']}\n\n⬆️ Level: **{level}/10**" + (f" · next: `{next_upgrade}` Embers" if next_upgrade else " · **MAX**") + (f"\n🔥 Soulfire modifier: **+{modifier:.0%} stroke yield**" if modifier else "\n🔥 Transmute for 25 Embers to roll a +10–30% stroke modifier."),
             inline=False
         )
     else:
-        shop_lines = []
-        for key, item in UPGRADES.items():
-            owned = upgrades.get(key, 0)
-            cost = config.get_upgrade_cost(key, owned)
-            shop_lines.append(f"{item['icon']} **{item['name']}** | Cost: `{format_number(cost)}` | Possessed: `{owned}`\n_{item['description']}_")
-
-        embed.add_field(
-            name="Requisitions",
-            value="\n\n".join(shop_lines[:6]),
-            inline=False
-        )
-        if len(shop_lines) > 6:
-            embed.add_field(
-                name="Abyssal Constructs",
-                value="\n\n".join(shop_lines[6:]),
-                inline=False
-            )
+        for slot in config.GEAR_SLOTS:
+            forge_lines = [f"{item['icon']} **{item['name']}** · {item['archetype'].title()} · `{format_number(item['cost'])}`" for item in config.GEAR.values() if item['slot'] == slot]
+            embed.add_field(name=f"{slot.title()} Components", value="\n".join(forge_lines), inline=False)
 
     return embed
 
@@ -264,7 +272,8 @@ def create_voyage_embed(player: dict, voyage_id: str = None) -> discord.Embed:
             color=config.COLOR_VOYAGE
         )
         for v_id, v in VOYAGES.items():
-            req_met = "✅ Ready" if player["total_souls"] >= v["min_souls"] else f"🔒 Requires {format_number(v['min_souls'])} souls"
+            rank_req = config.VOYAGE_VESSEL_REQUIREMENTS.get(v_id, 1)
+            req_met = "✅ Ready" if player["total_souls"] >= v["min_souls"] and database.vessel_level(player) >= rank_req else f"🔒 Requires {format_number(v['min_souls'])} souls & Vessel Rank {rank_req}"
             embed.add_field(
                 name=f"{v['icon']} {v['name']} ({req_met})",
                 value=f"_{v['description']}_\nRewards: `+{v['reward_embers']} Embers` | Stages: `{len(v['stages'])}`",
@@ -294,6 +303,9 @@ def create_voyage_embed(player: dict, voyage_id: str = None) -> discord.Embed:
 def create_gamble_embed(player: dict, result_msg: str = None) -> discord.Embed:
     """Generates Knuckle-Bones and Fate Cards embed."""
     obols = player["obols"]
+    fate_cooldown = database.fate_card_cooldown(player)
+    fate_remaining = max(0.0, fate_cooldown - (time.time() - player.get("last_fate_card", 0.0)))
+    fate_status = "**Ready now**" if fate_remaining == 0 else f"Ready in **{int((fate_remaining + 59) // 60)} minutes**"
     embed = discord.Embed(
         title="🎲 Thanatos' Knuckle-Bones & The Loom of Fate",
         description=f"🪙 Vaulted Obols: `{format_number(obols)}`\n"
@@ -310,7 +322,8 @@ def create_gamble_embed(player: dict, result_msg: str = None) -> discord.Embed:
     embed.add_field(
         name="🎴 The Three Fates (Tarot)",
         value="• Draw from Clotho, Lachesis, & Atropos.\n"
-              "• Free draw every 30 minutes for instant surges, obols, or embers.",
+              f"• Free draw every `{fate_cooldown // 60}` minutes for instant surges, obols, or embers.\n"
+              f"• {fate_status}",
         inline=True
     )
 
@@ -419,6 +432,7 @@ class CharonDashboardView(discord.ui.View):
         self.user_id = user_id
         self.current_realm = initial_realm
         self.selected_shop_item = None
+        self.selected_shop_slot = "hull"
         self.status_footer = None
         self.build_ui()
 
@@ -551,27 +565,54 @@ class CharonDashboardView(discord.ui.View):
 
     # 2. Shop Page Actions
     def _build_shop_actions(self, player: dict):
-        # Dropdown for selecting upgrades
+        # Five parallel upgrade tracks, one for each vessel part.
+        for index, slot in enumerate(config.GEAR_SLOTS):
+            btn = discord.ui.Button(label=slot.title(), style=discord.ButtonStyle.primary if self.selected_shop_slot == slot else discord.ButtonStyle.secondary, row=1)
+            btn.callback = self._make_slot_callback(slot)
+            self.add_item(btn)
+
+        # Dropdown only contains the five choices in the selected track.
         options = []
-        upgrades = player["upgrades"]
-        for item_id, item in UPGRADES.items():
-            owned = upgrades.get(item_id, 0)
-            cost = config.get_upgrade_cost(item_id, owned)
+        owned = player.get("owned_gear", [])
+        for item_id, item in config.GEAR.items():
+            if item["slot"] != self.selected_shop_slot:
+                continue
+            status = "Bound" if item_id in owned else f"{format_number(item['cost'])} Obols"
             options.append(discord.SelectOption(
-                label=f"{item['name']} (Owned: {owned})",
+                label=f"{item['name']} ({status})",
                 value=item_id,
-                description=f"Cost: {format_number(cost)} Obols | {item['description'][:50]}...",
+                description=f"{item['slot'].title()} · {item['archetype'].title()} · {item['description'][:45]}",
                 default=(self.selected_shop_item == item_id)
             ))
-        select = discord.ui.Select(placeholder="Select relic or vessel to inspect...", options=options, row=1)
+        select = discord.ui.Select(placeholder=f"Select a {self.selected_shop_slot} component...", options=options, row=2)
         select.callback = self._shop_select_callback
         self.add_item(select)
 
-        # Buy buttons
-        for qty in [1, 5, 10]:
-            btn = discord.ui.Button(label=f"Acquire x{qty}", style=discord.ButtonStyle.secondary, row=2)
-            btn.callback = self._make_buy_callback(qty)
-            self.add_item(btn)
+        forge_btn = discord.ui.Button(label="Forge & Equip", style=discord.ButtonStyle.success, row=3)
+        forge_btn.callback = self._make_buy_callback(False)
+        self.add_item(forge_btn)
+        equip_btn = discord.ui.Button(label="Equip Bound Gear", style=discord.ButtonStyle.secondary, row=3)
+        equip_btn.callback = self._make_buy_callback(True)
+        self.add_item(equip_btn)
+        transmute_btn = discord.ui.Button(label="Transmute (25 Embers)", style=discord.ButtonStyle.danger, row=3)
+        transmute_btn.callback = self._make_transmute_callback()
+        self.add_item(transmute_btn)
+        upgrade_btn = discord.ui.Button(label="Upgrade Bound Gear", style=discord.ButtonStyle.primary, row=3)
+        upgrade_btn.callback = self._make_upgrade_callback()
+        self.add_item(upgrade_btn)
+        vessel_btn = discord.ui.Button(label="Refit Vessel", style=discord.ButtonStyle.success, row=3)
+        vessel_btn.callback = self._make_vessel_upgrade_callback()
+        self.add_item(vessel_btn)
+
+    def _make_slot_callback(self, slot: str):
+        async def callback(interaction: discord.Interaction):
+            if interaction.user.id != self.user_id:
+                return await interaction.response.send_message("Use `/charon` to open your own helm.", ephemeral=True)
+            self.selected_shop_slot = slot
+            self.selected_shop_item = None
+            self.build_ui()
+            await interaction.response.edit_message(embed=self.get_embed(), view=self)
+        return callback
 
     async def _shop_select_callback(self, interaction: discord.Interaction):
         if interaction.user.id != self.user_id:
@@ -581,17 +622,52 @@ class CharonDashboardView(discord.ui.View):
         embed = self.get_embed()
         await interaction.response.edit_message(embed=embed, view=self)
 
-    def _make_buy_callback(self, qty: int):
+    def _make_buy_callback(self, equip: bool):
         async def callback(interaction: discord.Interaction):
             if interaction.user.id != self.user_id:
                 return await interaction.response.send_message("Use `/charon` to open your own helm.", ephemeral=True)
             if not self.selected_shop_item:
                 return await interaction.response.send_message("Select a relic from the dropdown above first.", ephemeral=True)
-            success, msg, player = database.buy_upgrade(self.user_id, self.selected_shop_item, interaction.user.display_name, qty)
+            action = database.equip_gear if equip else database.buy_gear
+            success, msg, player = action(self.user_id, self.selected_shop_item, interaction.user.display_name)
             self.status_footer = msg
             self.build_ui()
             embed = self.get_embed()
             await interaction.response.edit_message(embed=embed, view=self)
+        return callback
+
+    def _make_transmute_callback(self):
+        async def callback(interaction: discord.Interaction):
+            if interaction.user.id != self.user_id:
+                return await interaction.response.send_message("Use `/charon` to open your own helm.", ephemeral=True)
+            if not self.selected_shop_item:
+                return await interaction.response.send_message("Select a bound component first.", ephemeral=True)
+            success, msg, player = database.transmute_gear(self.user_id, self.selected_shop_item, interaction.user.display_name)
+            self.status_footer = msg
+            self.build_ui()
+            await interaction.response.edit_message(embed=self.get_embed(), view=self)
+        return callback
+
+    def _make_upgrade_callback(self):
+        async def callback(interaction: discord.Interaction):
+            if interaction.user.id != self.user_id:
+                return await interaction.response.send_message("Use `/charon` to open your own helm.", ephemeral=True)
+            if not self.selected_shop_item:
+                return await interaction.response.send_message("Select a bound component first.", ephemeral=True)
+            success, msg, player = database.upgrade_gear(self.user_id, self.selected_shop_item, interaction.user.display_name)
+            self.status_footer = msg
+            self.build_ui()
+            await interaction.response.edit_message(embed=self.get_embed(), view=self)
+        return callback
+
+    def _make_vessel_upgrade_callback(self):
+        async def callback(interaction: discord.Interaction):
+            if interaction.user.id != self.user_id:
+                return await interaction.response.send_message("Use `/charon` to open your own helm.", ephemeral=True)
+            success, msg, player = database.upgrade_vessel(self.user_id, interaction.user.display_name)
+            self.status_footer = msg
+            self.build_ui()
+            await interaction.response.edit_message(embed=self.get_embed(), view=self)
         return callback
 
     # 3. Voyages Page Actions
@@ -599,7 +675,7 @@ class CharonDashboardView(discord.ui.View):
         active = player.get("active_voyage", {})
         if not active or "voyage_id" not in active:
             for v_id, v in VOYAGES.items():
-                can_embark = player["total_souls"] >= v["min_souls"]
+                can_embark = player["total_souls"] >= v["min_souls"] and database.vessel_level(player) >= config.VOYAGE_VESSEL_REQUIREMENTS.get(v_id, 1)
                 btn = discord.ui.Button(
                     label=f"Embark: {v['name'][:18]}",
                     style=discord.ButtonStyle.primary if can_embark else discord.ButtonStyle.secondary,
@@ -817,6 +893,7 @@ class EncounterView(discord.ui.View):
         self.parent_view = parent_view
 
         enc = ENCOUNTERS[encounter_id]
+        player = database.get_player(user_id)
         styles = {
             "primary": discord.ButtonStyle.primary,
             "success": discord.ButtonStyle.success,
@@ -825,6 +902,8 @@ class EncounterView(discord.ui.View):
         }
 
         for choice_id, cdata in enc["choices"].items():
+            if choice_id == "extort" and not database.equipped(player, "stygian_harpoon"):
+                continue
             btn = discord.ui.Button(
                 label=cdata["label"],
                 style=styles.get(cdata.get("style"), discord.ButtonStyle.secondary),

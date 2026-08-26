@@ -80,12 +80,23 @@ class CharonBot(commands.Bot):
             except (discord.Forbidden, discord.NotFound, discord.HTTPException):
                 pass
 
+        async def report(message: str):
+            """Report safely whether a slash interaction was acknowledged or not."""
+            try:
+                if ctx.interaction is not None and ctx.interaction.response.is_done():
+                    await ctx.interaction.followup.send(message, ephemeral=True)
+                else:
+                    await ctx.send(message, delete_after=10)
+            except (discord.Forbidden, discord.NotFound, discord.HTTPException):
+                # The original failure may already be an expired interaction.
+                logger.warning("Could not report command error: interaction expired or was already handled.")
+
         if isinstance(error, commands.MissingRequiredArgument):
-            await ctx.send(f"Missing argument: `{error.param.name}`. Consult `/help` for guidance.", delete_after=10)
+            await report(f"Missing argument: `{error.param.name}`. Consult `/help` for guidance.")
             return
         
         logger.error(f"Command error in {ctx.command}: {error}", exc_info=error)
-        await ctx.send(f"An error occurred: `{str(error)}`", delete_after=10)
+        await report(f"An error occurred: `{error!s}`")
 
 
 
