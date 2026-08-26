@@ -39,8 +39,12 @@ class GameCog(commands.Cog, name="Game"):
             except (discord.Forbidden, discord.NotFound, discord.HTTPException):
                 pass
 
-        # 3. Send new response and store it
-        msg = await ctx.send(*args, **kwargs)
+        # 3. A deferred slash command must use its follow-up webhook; calling
+        # ctx.send would try to acknowledge the interaction a second time.
+        if ctx.interaction is not None and ctx.interaction.response.is_done():
+            msg = await ctx.interaction.followup.send(*args, wait=True, **kwargs)
+        else:
+            msg = await ctx.send(*args, **kwargs)
         self.bot.last_user_responses[key] = msg
         return msg
 
@@ -60,6 +64,10 @@ class GameCog(commands.Cog, name="Game"):
     ])
     async def charon_cmd(self, ctx: commands.Context, realm: str = "river"):
         """Master command opening the unified interactive dashboard."""
+        # Database reads and view construction can exceed Discord's 3-second
+        # initial-response window. Acknowledge before doing that work.
+        if ctx.interaction is not None:
+            await ctx.defer()
         initial_realm = realm.lower().strip() if realm else "river"
         if initial_realm not in ["river", "shop", "voyages", "gamble", "bounties", "artifacts", "profile"]:
             initial_realm = "river"

@@ -50,7 +50,9 @@ def init_db():
                 last_fate_card REAL DEFAULT 0.0,
                 active_voyage TEXT DEFAULT '{}',
                 pending_encounter TEXT DEFAULT '',
-                stats TEXT DEFAULT '{}'
+                stats TEXT DEFAULT '{}',
+                equipment TEXT DEFAULT '{}',
+                owned_gear TEXT DEFAULT '[]'
             )
         """)
 
@@ -70,6 +72,8 @@ def init_db():
             "active_voyage": "ALTER TABLE players ADD COLUMN active_voyage TEXT DEFAULT '{}'",
             "pending_encounter": "ALTER TABLE players ADD COLUMN pending_encounter TEXT DEFAULT ''",
             "stats": "ALTER TABLE players ADD COLUMN stats TEXT DEFAULT '{}'"
+            ,"equipment": "ALTER TABLE players ADD COLUMN equipment TEXT DEFAULT '{}'"
+            ,"owned_gear": "ALTER TABLE players ADD COLUMN owned_gear TEXT DEFAULT '[]'"
         }
 
         for col, stmt in new_column_statements.items():
@@ -125,6 +129,43 @@ def is_surge_active(player: dict) -> bool:
     return time.time() < player.get("surge_expires", 0.0)
 
 
+def current_river() -> dict:
+    """Returns a globally rotating river condition (one condition every 3 minutes)."""
+    return config.RIVER_CURRENTS[int(time.time() // 180) % len(config.RIVER_CURRENTS)]
+
+
+def equipped(player: dict, gear_id: str) -> bool:
+    return gear_id in player.get("equipment", {}).values()
+
+
+def gear_effect_multiplier(player: dict, archetype: str) -> float:
+    current = current_river()
+    if archetype == current["favored"]:
+        return 1.25
+    if archetype == current["penalty"]:
+        return 0.75
+    return 1.0
+
+
+def get_active_pacts(player: dict) -> list[str]:
+    equipment = player.get("equipment", {})
+    pacts = []
+    if equipment.get("hull") == "king_hull" and equipment.get("figurehead") == "king_figurehead":
+        pacts.append("Pact of the Underworld King")
+    return pacts
+
+
+def vessel_level(player: dict) -> int:
+    return max(1, min(10, int(player.get("stats", {}).get("vessel_level", 1))))
+
+
+def tempered_stroke_bonus(player: dict) -> float:
+    """Total randomized Soulfire bonuses on presently equipped components."""
+    mods = player.get("stats", {}).get("gear_mods", {})
+    levels = player.get("stats", {}).get("gear_levels", {})
+    return sum(float(mods.get(gear_id, 0.0)) + (0.10 * int(levels.get(gear_id, 0))) for gear_id in player.get("equipment", {}).values())
+
+
 def process_offline_earnings(player: dict) -> Tuple[dict, float]:
     """Applies passive OPS income based on elapsed time."""
     now = time.time()
@@ -147,9 +188,13 @@ def process_offline_earnings(player: dict) -> Tuple[dict, float]:
     surge = is_surge_active(player)
     
     _, ops = calculate_rates(upgrades, prestige, artifacts, surge)
+    if time.time() < player.get("stats", {}).get("overseer_expires", 0.0):
+        ops *= 6.0
 
     earned = ops * capped_elapsed
     player["obols"] += earned
+    if equipped(player, "soul_siphon_hull"):
+        player["obols"] += earned * 0.15 * gear_effect_multiplier(player, "necromancer")
     remaining_souls = max(0.0, TOTAL_HUMAN_SOULS - player["total_souls"])
     actual_souls_earned = min(earned, remaining_souls)
     player["total_souls"] += actual_souls_earned
@@ -226,6 +271,8 @@ def get_player(user_id: int, username: str = "Ferryman") -> dict:
                 "active_voyage": {},
                 "pending_encounter": "",
                 "stats": {}
+                ,"equipment": {}
+                ,"owned_gear": []
             }
 
         # Convert row to dict
@@ -253,6 +300,8 @@ def get_player(user_id: int, username: str = "Ferryman") -> dict:
             "active_voyage": json.loads(row["active_voyage"]) if row["active_voyage"] else {},
             "pending_encounter": str(row["pending_encounter"] or ""),
             "stats": json.loads(row["stats"]) if row["stats"] else {}
+            ,"equipment": json.loads(row["equipment"]) if row["equipment"] else {}
+            ,"owned_gear": json.loads(row["owned_gear"]) if row["owned_gear"] else []
         }
 
         # Update username if changed
@@ -283,7 +332,7 @@ def save_player(player: dict):
                 last_update = ?, last_daily = ?, encounters_completed = ?,
                 artifacts = ?, ashen_embers = ?, active_bounties = ?,
                 surge_meter = ?, surge_expires = ?, last_gamble = ?,
-                last_fate_card = ?, active_voyage = ?, pending_encounter = ?, stats = ?
+                last_fate_card = ?, active_voyage = ?, pending_encounter = ?, stats = ?, equipment = ?, owned_gear = ?
             WHERE user_id = ?
         """, (
             player["username"],
@@ -304,6 +353,8 @@ def save_player(player: dict):
             json.dumps(player.get("active_voyage", {})),
             player.get("pending_encounter", ""),
             json.dumps(player.get("stats", {})),
+            json.dumps(player.get("equipment", {})),
+            json.dumps(player.get("owned_gear", [])),
             player["user_id"]
         ))
         conn.commit()
@@ -335,6 +386,8 @@ def add_surge_energy(player: dict, amount: float = SURGE_CHARGE_PER_ROW) -> Tupl
     current = player.get("surge_meter", 0.0) + amount
     if current >= SURGE_THRESHOLD:
         duration = SURGE_DURATION_SECONDS
+        if "Pact of the Underworld King" in get_active_pacts(player):
+            duration *= 5
         if player.get("artifacts", {}).get("helm_shadows"):
             duration += 15.0  # Helm of Shadow bonus
         player["surge_meter"] = 0.0
@@ -363,6 +416,25 @@ def ferry_souls(user_id: int, username: str = "Ferryman") -> Tuple[dict, float, 
     surge_triggered, surge_active = add_surge_energy(player)
 
     opc, _ = calculate_rates(player["upgrades"], player["prestige"], player.get("artifacts", {}), surge_active)
+    opc *= 1.0 + tempered_stroke_bonus(player)
+    now = time.time()
+    # The Speed-Rower turns cadence into a short-lived, skill-driven multiplier.
+    if equipped(player, "fury_oarlock"):
+        stats = player.setdefault("stats", {})
+        last = stats.get("last_row_at", 0.0)
+        combo = min(10, stats.get("rhythm_combo", 0) + 1) if now - last <= 2 else 1
+        stats["rhythm_combo"] = combo
+        stats["last_row_at"] = now
+        opc *= combo * gear_effect_multiplier(player, "speed")
+    else:
+        player.setdefault("stats", {})["rhythm_combo"] = 0
+    if equipped(player, "bone_diviner_oar") and random.random() < .12:
+        opc *= 3 * gear_effect_multiplier(player, "fate")
+        player.setdefault("stats", {})["last_gear_proc"] = "Critical Dice Roll! 3x soul burst."
+    if surge_active and equipped(player, "bellowing_drums"):
+        player["surge_expires"] += 1
+    if equipped(player, "chthonic_overseer"):
+        player.setdefault("stats", {})["overseer_expires"] = now + 10
     
     # Coin of the Damned gives double obols
     obol_gain = opc * (2.0 if player.get("artifacts", {}).get("coin_damned") else 1.0)
@@ -382,16 +454,99 @@ def ferry_souls(user_id: int, username: str = "Ferryman") -> Tuple[dict, float, 
     # Roll for River Encounter (~18% chance, boosted by Golden Bough)
     new_encounter_id = None
     if not player.get("pending_encounter"):
-        chance = 0.18
+        # Anomalies are rare events, not a five-stroke interruption.
+        chance = 0.03
         if player.get("artifacts", {}).get("golden_bough"):
             chance += 0.10
+        if equipped(player, "siren_bait_net"):
+            chance *= 4 * gear_effect_multiplier(player, "marauder")
         if random.random() < chance:
-            encounter_id = random.choice(list(ENCOUNTERS.keys()))
+            anomaly_levels = {"gilded_king": 1, "wandering_shades": 2, "siren_cocytus": 3, "thanatos_envoy": 4, "charybdis_vortex": 6}
+            eligible = [enc_id for enc_id in ENCOUNTERS if vessel_level(player) >= anomaly_levels.get(enc_id, 1)]
+            encounter_id = random.choice(eligible)
             player["pending_encounter"] = encounter_id
             new_encounter_id = encounter_id
 
     save_player(player)
     return player, opc, offline_earned, surge_triggered, new_encounter_id
+
+
+def buy_gear(user_id: int, gear_id: str, username: str = "Ferryman") -> Tuple[bool, str, dict]:
+    """Binds a unique gear piece and equips it in its dedicated vessel slot."""
+    if gear_id not in config.GEAR:
+        return False, "Unknown vessel component.", {}
+    player = get_player(user_id, username)
+    if gear_id in player.get("owned_gear", []):
+        return False, "That component is already bound. Equip it from the forge list.", player
+    gear = config.GEAR[gear_id]
+    if vessel_level(player) < gear["vessel_req"]:
+        return False, f"Requires Vessel Rank {gear['vessel_req']} (your vessel is Rank {vessel_level(player)}).", player
+    if player["obols"] < gear["cost"]:
+        return False, f"Requires {gear['cost']:,} Obols.", player
+    player["obols"] -= gear["cost"]
+    player.setdefault("owned_gear", []).append(gear_id)
+    player.setdefault("equipment", {})[gear["slot"]] = gear_id
+    save_player(player)
+    return True, f"Bound and equipped {gear['name']} in the {gear['slot']} slot.", player
+
+
+def equip_gear(user_id: int, gear_id: str, username: str = "Ferryman") -> Tuple[bool, str, dict]:
+    player = get_player(user_id, username)
+    if gear_id not in player.get("owned_gear", []) or gear_id not in config.GEAR:
+        return False, "That component has not been forged.", player
+    gear = config.GEAR[gear_id]
+    player.setdefault("equipment", {})[gear["slot"]] = gear_id
+    save_player(player)
+    return True, f"Equipped {gear['name']}.", player
+
+
+def transmute_gear(user_id: int, gear_id: str, username: str = "Ferryman") -> Tuple[bool, str, dict]:
+    """Spend Embers to reroll a Soulfire stroke modifier on a bound component."""
+    player = get_player(user_id, username)
+    if gear_id not in player.get("owned_gear", []) or gear_id not in config.GEAR:
+        return False, "Only a bound vessel component can be transmuted.", player
+    cost = 25
+    if player.get("ashen_embers", 0) < cost:
+        return False, f"Transmutation requires {cost} Ashen Embers.", player
+    bonus = random.randint(10, 30) / 100
+    player["ashen_embers"] -= cost
+    player.setdefault("stats", {}).setdefault("gear_mods", {})[gear_id] = bonus
+    save_player(player)
+    return True, f"Soulfire reshaped {config.GEAR[gear_id]['name']}: **+{bonus:.0%} stroke yield** while equipped.", player
+
+
+def upgrade_gear(user_id: int, gear_id: str, username: str = "Ferryman") -> Tuple[bool, str, dict]:
+    """Level a bound component to a maximum of 10; Ember costs rise quadratically."""
+    player = get_player(user_id, username)
+    if gear_id not in player.get("owned_gear", []) or gear_id not in config.GEAR:
+        return False, "Only a bound vessel component can be upgraded.", player
+    levels = player.setdefault("stats", {}).setdefault("gear_levels", {})
+    level = int(levels.get(gear_id, 0))
+    if level >= 10:
+        return False, f"{config.GEAR[gear_id]['name']} is already at the maximum level (10).", player
+    cost = 10 * (level + 1) ** 2
+    if player.get("ashen_embers", 0) < cost:
+        return False, f"Level {level + 1} requires {cost} Ashen Embers.", player
+    player["ashen_embers"] -= cost
+    levels[gear_id] = level + 1
+    save_player(player)
+    return True, f"Upgraded {config.GEAR[gear_id]['name']} to **Level {level + 1}/10** (+10% stroke yield while equipped).", player
+
+
+def upgrade_vessel(user_id: int, username: str = "Ferryman") -> Tuple[bool, str, dict]:
+    """Refit the whole vessel, unlocking higher-rank gear and river content."""
+    player = get_player(user_id, username)
+    level = vessel_level(player)
+    if level >= 10:
+        return False, "The Elysian Cruise Ship is already the final vessel rank.", player
+    obol_cost, ember_cost = config.vessel_upgrade_cost(level)
+    if player["obols"] < obol_cost or player.get("ashen_embers", 0) < ember_cost:
+        return False, f"Rank {level + 1} needs {obol_cost:,.0f} Obols and {ember_cost} Ashen Embers.", player
+    player["obols"] -= obol_cost
+    player["ashen_embers"] -= ember_cost
+    player.setdefault("stats", {})["vessel_level"] = level + 1
+    save_player(player)
+    return True, f"Refit complete: **Rank {level + 1} — {config.VESSEL_LEVELS[level + 1]}**. New gear and river threats answer your wake.", player
 
 
 def resolve_encounter(user_id: int, encounter_id: str, choice_id: str, username: str = "Ferryman") -> Tuple[bool, str, dict]:
@@ -506,6 +661,9 @@ def start_voyage(user_id: int, voyage_id: str, username: str = "Ferryman") -> Tu
 
     player = get_player(user_id, username)
     voyage_data = VOYAGES[voyage_id]
+    required_rank = config.VOYAGE_VESSEL_REQUIREMENTS.get(voyage_id, 1)
+    if vessel_level(player) < required_rank:
+        return False, f"{voyage_data['name']} requires Vessel Rank {required_rank}.", player
 
     if player["total_souls"] < voyage_data["min_souls"]:
         return False, f"Requires at least **{voyage_data['min_souls']:,}** souls delivered to enter {voyage_data['name']}.", player
@@ -581,8 +739,11 @@ def roll_knucklebones(user_id: int, wager: int, username: str = "Ferryman") -> T
     player["last_gamble"] = now
     progress_bounty(player, "gambles_played", 1)
 
+    fate_weaver = equipped(player, "moirai_spindle")
     if p_total > t_total:
         multiplier = 3.0 if p_d1 == p_d2 else 2.0
+        if fate_weaver:
+            multiplier *= 4.0 * gear_effect_multiplier(player, "fate")
         winnings = wager * multiplier
         player["obols"] += (winnings - wager)
         save_player(player)
@@ -603,7 +764,7 @@ def draw_fate_card(user_id: int, username: str = "Ferryman") -> Tuple[bool, str,
     """Draws a card from the Moirai (Fate Deck) once every 30 minutes."""
     player = get_player(user_id, username)
     now = time.time()
-    cooldown = 1800  # 30 minutes
+    cooldown = 900 if equipped(player, "moirai_spindle") else 1800
 
     last_card = player.get("last_fate_card", 0.0)
     if now - last_card < cooldown:
