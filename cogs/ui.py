@@ -303,6 +303,9 @@ def create_voyage_embed(player: dict, voyage_id: str = None) -> discord.Embed:
 def create_gamble_embed(player: dict, result_msg: str = None) -> discord.Embed:
     """Generates Knuckle-Bones and Fate Cards embed."""
     obols = player["obols"]
+    fate_cooldown = database.fate_card_cooldown(player)
+    fate_remaining = max(0.0, fate_cooldown - (time.time() - player.get("last_fate_card", 0.0)))
+    fate_status = "**Ready now**" if fate_remaining == 0 else f"Ready in **{int((fate_remaining + 59) // 60)} minutes**"
     embed = discord.Embed(
         title="🎲 Thanatos' Knuckle-Bones & The Loom of Fate",
         description=f"🪙 Vaulted Obols: `{format_number(obols)}`\n"
@@ -319,7 +322,8 @@ def create_gamble_embed(player: dict, result_msg: str = None) -> discord.Embed:
     embed.add_field(
         name="🎴 The Three Fates (Tarot)",
         value="• Draw from Clotho, Lachesis, & Atropos.\n"
-              "• Free draw every 30 minutes for instant surges, obols, or embers.",
+              f"• Free draw every `{fate_cooldown // 60}` minutes for instant surges, obols, or embers.\n"
+              f"• {fate_status}",
         inline=True
     )
 

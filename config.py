@@ -28,7 +28,7 @@ GEAR_SLOTS = ("hull", "oars", "lantern", "figurehead", "crew")
 VESSEL_LEVELS = {
     1: "Splintered Skiff", 2: "Pitch-Coated Ferry", 3: "Shade Galley",
     4: "Barge of Wailing", 5: "Iron Mortuary Vessel", 6: "Abyssal Skimmer",
-    7: "Dreadnought of Lethe", 8: "Cocytus' Aircraft Carrier", 9: "Hades' Grand Liner",
+    7: "Dreadnought of Lethe", 8: "Obsidian Aircraft Carrier", 9: "Hades' Grand Liner",
     10: "The One Ship to Ferry Them All",
 }
 

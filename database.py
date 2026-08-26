@@ -168,6 +168,11 @@ def river_ember_reward(player: dict, base_reward: int) -> int:
     return max(1, round(base_reward * multiplier))
 
 
+def fate_card_cooldown(player: dict) -> int:
+    """Returns the player's effective Fate Card cooldown in seconds."""
+    return 900 if equipped(player, "moirai_spindle") else 1800
+
+
 def get_active_pacts(player: dict) -> list[str]:
     equipment = player.get("equipment", {})
     pacts = []
@@ -209,19 +214,25 @@ def process_offline_earnings(player: dict) -> Tuple[dict, float]:
     surge = is_surge_active(player)
     
     _, ops = calculate_rates(upgrades, prestige, artifacts, surge)
-    if time.time() < player.get("stats", {}).get("overseer_expires", 0.0):
-        ops *= 6.0
 
-    earned = ops * capped_elapsed
+    # Only the portion of the capped collection window covered by the
+    # Overseer's ten-second inspiration receives its 6x passive-flow bonus.
+    collection_start = max(last_update, now - capped_elapsed)
+    overseer_expires = player.get("stats", {}).get("overseer_expires", 0.0)
+    overseer_seconds = max(0.0, min(now, overseer_expires) - collection_start)
+    earned = ops * (capped_elapsed + (5.0 * overseer_seconds))
+    offline_earned = earned
     player["obols"] += earned
     if equipped(player, "soul_siphon_hull"):
-        player["obols"] += earned * 0.15 * gear_effect_multiplier(player, "necromancer")
+        siphon_bonus = earned * 0.15 * gear_effect_multiplier(player, "necromancer")
+        player["obols"] += siphon_bonus
+        offline_earned += siphon_bonus
     remaining_souls = max(0.0, TOTAL_HUMAN_SOULS - player["total_souls"])
     actual_souls_earned = min(earned, remaining_souls)
     player["total_souls"] += actual_souls_earned
     player["last_update"] = now
 
-    return player, earned
+    return player, offline_earned
 
 
 def generate_initial_bounties() -> List[dict]:
@@ -243,6 +254,7 @@ def generate_initial_bounties() -> List[dict]:
     return bounties
 
 
+@serialized_player_mutation
 def get_player(user_id: int, username: str = "Ferryman") -> dict:
     """Retrieves or creates a player, processing offline earnings."""
     init_db()
@@ -420,6 +432,7 @@ def add_surge_energy(player: dict, amount: float = SURGE_CHARGE_PER_ROW) -> Tupl
         return False, False
 
 
+@serialized_player_mutation
 def ferry_souls(user_id: int, username: str = "Ferryman") -> Tuple[dict, float, float, bool, Optional[str]]:
     """
     Ferries souls (click action).
@@ -566,7 +579,7 @@ def upgrade_vessel(user_id: int, username: str = "Ferryman") -> Tuple[bool, str,
     player = get_player(user_id, username)
     level = vessel_level(player)
     if level >= 10:
-        return False, "The Elysian Cruise Ship is already the final vessel rank.", player
+        return False, "The One Ship to Ferry Them All is already the final vessel rank.", player
     obol_cost, ember_cost = config.vessel_upgrade_cost(level)
     if player["obols"] < obol_cost or player.get("ashen_embers", 0) < ember_cost:
         return False, f"Rank {level + 1} needs {obol_cost:,.0f} Obols and {ember_cost} Ashen Embers.", player
@@ -577,6 +590,7 @@ def upgrade_vessel(user_id: int, username: str = "Ferryman") -> Tuple[bool, str,
     return True, f"Refit complete: **Rank {level + 1} — {config.VESSEL_LEVELS[level + 1]}**. New gear and river threats answer your wake.", player
 
 
+@serialized_player_mutation
 def resolve_encounter(user_id: int, encounter_id: str, choice_id: str, username: str = "Ferryman") -> Tuple[bool, str, dict]:
     """Resolves a player's decision for a random River Encounter."""
     player = get_player(user_id, username)
@@ -686,6 +700,7 @@ def resolve_encounter(user_id: int, encounter_id: str, choice_id: str, username:
     return True, msg, player
 
 
+@serialized_player_mutation
 def start_voyage(user_id: int, voyage_id: str, username: str = "Ferryman") -> Tuple[bool, str, dict]:
     """Begins an Underworld River Voyage."""
     if voyage_id not in VOYAGES:
@@ -709,6 +724,7 @@ def start_voyage(user_id: int, voyage_id: str, username: str = "Ferryman") -> Tu
     return True, f"Embarked on voyage: **{voyage_data['name']}**!", player
 
 
+@serialized_player_mutation
 def choose_voyage_action(user_id: int, choice_id: str, username: str = "Ferryman") -> Tuple[bool, str, dict, bool]:
     """
     Advances active voyage stage.
@@ -750,6 +766,7 @@ def choose_voyage_action(user_id: int, choice_id: str, username: str = "Ferryman
         return True, f"Passed {stage_info['title']}. Moving to Stage {current_stage + 1}...", player, False
 
 
+@serialized_player_mutation
 def roll_knucklebones(user_id: int, wager: int, username: str = "Ferryman") -> Tuple[bool, str, dict]:
     """Wagers Obols in a 2d6 dice game against Thanatos."""
     if wager < 10:
@@ -792,11 +809,12 @@ def roll_knucklebones(user_id: int, wager: int, username: str = "Ferryman") -> T
                      f"**DEFEAT.** Lost {wager:,.0f} Obols to the void.", player
 
 
+@serialized_player_mutation
 def draw_fate_card(user_id: int, username: str = "Ferryman") -> Tuple[bool, str, dict]:
     """Draws a card from the Moirai (Fate Deck) once every 30 minutes."""
     player = get_player(user_id, username)
     now = time.time()
-    cooldown = 900 if equipped(player, "moirai_spindle") else 1800
+    cooldown = fate_card_cooldown(player)
 
     last_card = player.get("last_fate_card", 0.0)
     if now - last_card < cooldown:
@@ -831,6 +849,7 @@ def draw_fate_card(user_id: int, username: str = "Ferryman") -> Tuple[bool, str,
     return True, msg, player
 
 
+@serialized_player_mutation
 def claim_bounty(user_id: int, bounty_id: str, username: str = "Ferryman") -> Tuple[bool, str, dict]:
     """Claims reward for a completed bounty and rolls a new one."""
     player = get_player(user_id, username)
@@ -873,6 +892,7 @@ def claim_bounty(user_id: int, bounty_id: str, username: str = "Ferryman") -> Tu
     return True, f"📜 Claimed +{embers} Ashen Embers for completing {target_bounty['title']}!", player
 
 
+@serialized_player_mutation
 def buy_artifact(user_id: int, artifact_id: str, username: str = "Ferryman") -> Tuple[bool, str, dict]:
     """Unlocks a mythic permanent artifact with Ashen Embers."""
     if artifact_id not in MYTHIC_ARTIFACTS:
@@ -898,6 +918,7 @@ def buy_artifact(user_id: int, artifact_id: str, username: str = "Ferryman") -> 
     return True, f"🏆 Bound mythic relic {art_info['name']}! {art_info['description']}", player
 
 
+@serialized_player_mutation
 def buy_upgrade(user_id: int, upgrade_id: str, username: str = "Ferryman", quantity: int = 1) -> Tuple[bool, str, dict]:
     """Buys specified quantity of upgrade for player."""
     if upgrade_id not in UPGRADES:
@@ -921,6 +942,7 @@ def buy_upgrade(user_id: int, upgrade_id: str, username: str = "Ferryman", quant
     return True, f"Purchased x{quantity} {item_name} for {total_cost:,.0f} Obols.", player
 
 
+@serialized_player_mutation
 def claim_daily(user_id: int, username: str = "Ferryman") -> Tuple[bool, str, float, dict]:
     """Claims daily Hades Tribute. 24h cooldown."""
     player = get_player(user_id, username)
@@ -945,6 +967,7 @@ def claim_daily(user_id: int, username: str = "Ferryman") -> Tuple[bool, str, fl
     return True, f"Claimed the Daily Hades Tribute of {bonus:,.0f} Obols!", bonus, player
 
 
+@serialized_player_mutation
 def ascend(user_id: int, username: str = "Ferryman") -> Tuple[bool, str, dict]:
     """Prestige once all human souls reached."""
     player = get_player(user_id, username)
@@ -965,6 +988,7 @@ def ascend(user_id: int, username: str = "Ferryman") -> Tuple[bool, str, dict]:
     return True, f"🏆 CONGRATULATIONS! You have ferried all human souls and ascended to Prestige Level {player['prestige']} (+{(player['prestige']) * 100}% permanent boost)!\nThe shoreline of Acheron replenishes with shades awaiting passage in the new cycle.", player
 
 
+@serialized_player_mutation
 def reset_player_data(user_id: int, username: str = "Ferryman") -> dict:
     """Completely wipes and resets all player progress (Obols, Souls, Prestige, Embers, Relics, Stats)."""
     init_db()
