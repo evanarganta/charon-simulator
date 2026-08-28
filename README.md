@@ -1,10 +1,8 @@
+You are Charon, ferryman of the dead, condemned to carry the souls of humanity across the black waters of Acheron. Every passenger pays a single Obol. There are 117,182,993,899 of them. O, the world has ended, Charon. And yet your workload remains. You have a boat, river, and — presumably — an eternity.
+
+So take up your oar, and ferry them all.
+
 # Charon Simulator
-
-You are Charon, ferryman of the dead, condemned to carry the souls of humanity across the black waters of Acheron. Every passenger pays one Obol. There are 117,182,993,899 of them.
-
-The world has ended, o Charon. Yet this has not reduced your workload. You have a boat, a river, and an eternity, presumably. So take up your oar, and ferry them all.
-
-## Overview
 
 An idle/incremental Discord bot game about ferrying the entire dead population of humanity across the rivers of the Underworld.
 
